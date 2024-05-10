@@ -1,6 +1,9 @@
 name: 'Create kops cluster'
 description: "Workflow that creates kops cluster"
 inputs:
+  cloud:
+    description: "Cloud provider to use. Can be one of: gce, aws"
+    required: true
   cluster_name:
     description: "Name of the cluster to create"
     required: true
@@ -20,19 +23,29 @@ inputs:
     description: "Bucket where to store kops state"
     required: true
   project_id:
-    description: "GCP Project in which to create cluster"
-    required: true
+    description: "GCP Project in which to create cluster. Only required if cloud=gce"
+    required: false
 runs:
   using: "composite"
   steps:
     - name: Create cluster
       shell: bash
       run: |
+        cloud_opts=""
+
+        if [ "${{ inputs.cloud }}" = "gce" ]; then
+          if [ -z "${{ inputs.project_id }}" ]; then
+            echo "project_id required when cloud set to gce"
+            exit 1
+          fi
+          cloud_opts="--project ${{ inputs.project_id }}"
+        fi
+
         ./kops create cluster \
           ${{ inputs.cluster_name }} \
+          --cloud ${{ inputs.cloud }} \
           --state ${{ inputs.kops_state }} \
           --zones us-west1-a \
-          --project=${{ inputs.project_id }} \
           --control-plane-count ${{ inputs.control_plane_count }} \
           --control-plane-size ${{ inputs.control_plane_size }} \
           --node-count ${{ inputs.node_count }} \
@@ -48,7 +61,8 @@ runs:
           --set spec.kubeScheduler.enableContentionProfiling=true \
           --set spec.kubeScheduler.enableProfiling=true \
           --set spec.kubeScheduler.authorizationAlwaysAllowPaths=/metrics \
-          --set spec.kubeScheduler.authorizationAlwaysAllowPaths=/healthz \
+          --set spec.kubeSchedulAer.authorizationAlwaysAllowPaths=/healthz \
+          $cloud_opts \
           --yes
 
     - name: Dump cluster config
